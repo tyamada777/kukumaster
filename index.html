@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>九九マスター</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <style>
+    :root {
+      --row-1: #ffd1d1;
+      --row-2: #ffe1c1;
+      --row-3: #fff5b8;
+      --row-4: #d8f5b8;
+      --row-5: #c8f0d4;
+      --row-6: #c8eaf5;
+      --row-7: #c8d8f5;
+      --row-8: #d4c8f5;
+      --row-9: #e8c8f0;
+    }
+
+    html, body {
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      overscroll-behavior: none;
+      background: #f8f9fa;
+      margin: 0;
+      padding: 0;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+
+    #app {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      15%       { transform: translateX(-8px); }
+      30%       { transform: translateX(8px); }
+      45%       { transform: translateX(-6px); }
+      60%       { transform: translateX(6px); }
+      75%       { transform: translateX(-3px); }
+      90%       { transform: translateX(3px); }
+    }
+
+    .shake { animation: shake 0.4s ease-in-out; }
+
+    /* ── Matrix ── */
+    #matrix-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      width: 100%;
+      height: 100%;
+      gap: 1px;
+    }
+
+    .matrix-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(7px, 1.7vw, 15px);
+      font-weight: 600;
+      border-radius: 3px;
+      transition: background-color 0.15s;
+    }
+
+    .matrix-cell.header {
+      background: #4a5568;
+      color: white;
+      font-weight: 700;
+      font-size: clamp(9px, 2.2vw, 18px);
+    }
+
+    .matrix-cell.corner { background: #2d3748; }
+
+    .matrix-cell.answered {
+      font-weight: 800;
+      color: #2d3748;
+      background: #fff;
+    }
+
+    .matrix-cell.current-cell {
+      outline: 2px solid #f59e0b;
+      outline-offset: -2px;
+    }
+
+    .matrix-cell.empty {
+      background: #f0f4f8;
+      color: #d0d5db;
+      font-size: clamp(6px, 1.2vw, 10px);
+    }
+
+    /* ── Keypad ── */
+    #keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 5px;
+      padding: 6px;
+      height: 100%;
+    }
+
+    .key-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.08s, background 0.08s;
+      line-height: 1.1;
+    }
+
+    .key-btn:active { transform: scale(0.92); background: #e2e8f0; }
+
+    .key-btn .kana {
+      font-size: clamp(16px, 4vw, 26px);
+      font-weight: 700;
+      color: #2d3748;
+    }
+
+    .key-btn.special .kana {
+      font-size: clamp(12px, 3vw, 20px);
+    }
+
+    .key-btn .eng {
+      font-size: clamp(9px, 2vw, 13px);
+      color: #718096;
+      margin-top: 1px;
+    }
+
+    .key-btn.answer-btn {
+      background: #48bb78;
+      border-color: #38a169;
+    }
+    .key-btn.answer-btn:active { background: #38a169; }
+    .key-btn.answer-btn .kana,
+    .key-btn.answer-btn .eng { color: white; }
+
+    .key-btn.delete-btn { background: #fed7d7; border-color: #fc8181; }
+    .key-btn.delete-btn:active { background: #fc8181; }
+
+    /* ── Question ── */
+    #question-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #question-text {
+      font-size: clamp(30px, 7.5vw, 58px);
+      font-weight: 900;
+      color: #2d3748;
+      letter-spacing: 0.04em;
+    }
+
+    #answer-input-display {
+      font-size: clamp(22px, 5.5vw, 42px);
+      font-weight: 700;
+      color: #4a90e2;
+      min-height: 1.2em;
+    }
+
+    /* ── Header buttons ── */
+    .mode-btn {
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: clamp(10px, 2.2vw, 14px);
+      font-weight: 600;
+      border: 2px solid #cbd5e0;
+      background: white;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+      transition: all 0.12s;
+      color: #4a5568;
+    }
+    .mode-btn.active {
+      background: #4a5568;
+      border-color: #4a5568;
+      color: white;
+    }
+
+    .dan-btn {
+      width: clamp(24px, 5.5vw, 36px);
+      height: clamp(24px, 5.5vw, 36px);
+      border-radius: 50%;
+      font-size: clamp(11px, 2.4vw, 16px);
+      font-weight: 700;
+      border: 2px solid #cbd5e0;
+      background: white;
+      cursor: pointer;
+      touch-action: manipulation;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s;
+      flex-shrink: 0;
+      color: #4a5568;
+    }
+    .dan-btn.active {
+      background: #4a5568;
+      border-color: #4a5568;
+      color: white;
+    }
+
+    .star-badge {
+      font-size: clamp(9px, 1.8vw, 12px);
+      text-align: center;
+      white-space: nowrap;
+      color: #718096;
+    }
+    .star-badge.mastered { color: #d69e2e; }
+
+    .ctrl-btn {
+      font-size: clamp(9px, 1.8vw, 12px);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1.5px solid #cbd5e0;
+      background: #edf2f7;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+      color: #4a5568;
+    }
+
+    .ctrl-btn-danger {
+      font-size: clamp(8px, 1.5vw, 11px);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1.5px solid #fc8181;
+      background: white;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+      color: #e53e3e;
+    }
+
+    /* ── Title screen ── */
+    #title-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(160deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 24px;
+      gap: 16px;
+    }
+
+    #title-screen.hidden { display: none; }
+
+    .title-logo {
+      font-size: clamp(36px, 9vw, 64px);
+      font-weight: 900;
+      color: white;
+      text-align: center;
+      line-height: 1.1;
+      text-shadow: 0 3px 12px rgba(0,0,0,0.3);
+    }
+
+    .title-logo-en {
+      font-size: clamp(13px, 3vw, 20px);
+      color: rgba(255,255,255,0.75);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+
+    .mode-card {
+      width: 100%;
+      max-width: 360px;
+      background: white;
+      border-radius: 16px;
+      padding: 16px 20px;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      transition: transform 0.12s, box-shadow 0.12s;
+      border: 3px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mode-card:active {
+      transform: scale(0.96);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .mode-card-icon {
+      font-size: clamp(28px, 6vw, 40px);
+      flex-shrink: 0;
+    }
+
+    .mode-card-body { text-align: left; }
+
+    .mode-card-title {
+      font-size: clamp(16px, 3.8vw, 24px);
+      font-weight: 800;
+      color: #2d3748;
+      line-height: 1.2;
+    }
+
+    .mode-card-title-en {
+      font-size: clamp(11px, 2.5vw, 16px);
+      font-weight: 600;
+      color: #718096;
+    }
+
+    .mode-card-desc {
+      font-size: clamp(10px, 2.2vw, 14px);
+      color: #a0aec0;
+      margin-top: 3px;
+    }
+
+    /* ── Back button ── */
+    .back-btn {
+      font-size: clamp(10px, 2.2vw, 14px);
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1.5px solid #cbd5e0;
+      background: #edf2f7;
+      cursor: pointer;
+      touch-action: manipulation;
+      white-space: nowrap;
+      color: #4a5568;
+      font-weight: 600;
+    }
+
+    #current-mode-label {
+      font-size: clamp(10px, 2.2vw, 14px);
+      font-weight: 700;
+      color: #4a5568;
+      white-space: nowrap;
+    }
+
+    /* ── Completion overlay ── */
+    #completion-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #completion-overlay.show { display: flex; }
+
+    #completion-card {
+      background: white;
+      border-radius: 24px;
+      padding: 28px 36px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      max-width: 85vw;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ── -->
+  <header id="header" style="
+    flex-basis: 10%;
+    min-height: 72px;
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    background: white;
+    border-bottom: 2px solid #e2e8f0;
+  ">
+    <div style="display:flex; align-items:center; gap:6px; flex-wrap:nowrap;">
+      <button class="back-btn" id="btn-back">← もどる<br><small style="font-weight:400;color:#718096;">Back</small></button>
+      <span id="current-mode-label"></span>
+      <div style="margin-left:auto; display:flex; gap:4px; align-items:center; flex-shrink:0;">
+        <button id="btn-mute" class="ctrl-btn" style="font-size:clamp(13px,2.8vw,20px);padding:2px 6px;">🔊</button>
+        <button class="ctrl-btn"        id="btn-restart">やりなおす<br><small style="font-weight:400;">Retry</small></button>
+        <button class="ctrl-btn-danger" id="btn-reset-all">リセット<br><small style="font-weight:400;">Reset All</small></button>
+      </div>
+    </div>
+    <div id="dan-selector" style="display:flex; align-items:center; gap:5px; overflow-x:auto; padding-bottom:2px;"></div>
+  </header>
+
+  <!-- ── Matrix ── -->
+  <section style="flex-basis:40%; overflow:hidden; padding:4px; background:#f7fafc;">
+    <div id="matrix-grid"></div>
+  </section>
+
+  <!-- ── Question ── -->
+  <section id="question-display" style="flex-basis:15%; background:white; border-top:2px solid #e2e8f0; border-bottom:2px solid #e2e8f0;">
+    <div id="question-text">？ × ？ = </div>
+    <div id="answer-input-display">？</div>
+  </section>
+
+  <!-- ── Keypad ── -->
+  <section style="flex-basis:35%; background:#f0f4f8;">
+    <div id="keypad"></div>
+  </section>
+</div>
+
+<!-- ── Title screen ── -->
+<div id="title-screen">
+  <div style="text-align:center;">
+    <div class="title-logo">🎯 九九マスター</div>
+    <div class="title-logo-en">Multiplication Master</div>
+  </div>
+
+  <button class="mode-card" data-mode="sequential">
+    <div class="mode-card-icon">📋</div>
+    <div class="mode-card-body">
+      <div class="mode-card-title">じゅんばん <span class="mode-card-title-en">/ In Order</span></div>
+      <div class="mode-card-desc">段ごとに１から順番に出題 · Practice in order</div>
+    </div>
+  </button>
+
+  <button class="mode-card" data-mode="random">
+    <div class="mode-card-icon">🔀</div>
+    <div class="mode-card-body">
+      <div class="mode-card-title">ランダム <span class="mode-card-title-en">/ Random</span></div>
+      <div class="mode-card-desc">段ごとにランダムに出題 · Shuffle within a table</div>
+    </div>
+  </button>
+
+  <button class="mode-card" data-mode="mixall">
+    <div class="mode-card-icon">🌈</div>
+    <div class="mode-card-body">
+      <div class="mode-card-title">ぜんぶミックス <span class="mode-card-title-en">/ Mix All</span></div>
+      <div class="mode-card-desc">全81問まとめてランダム · All 81 questions mixed</div>
+    </div>
+  </button>
+</div>
+
+<!-- ── Completion overlay ── -->
+<div id="completion-overlay">
+  <div id="completion-card">
+    <div id="comp-emoji"  style="font-size:60px; line-height:1.1;">🎉</div>
+    <div id="comp-title"  style="font-size:clamp(18px,4vw,26px); font-weight:900; color:#2d3748; margin:8px 0;"></div>
+    <div id="comp-sub"    style="font-size:clamp(13px,3vw,17px); color:#718096; margin-bottom:20px;"></div>
+    <button id="comp-next" style="
+      padding: 12px 32px;
+      background: #48bb78;
+      color: white;
+      border-radius: 12px;
+      font-size: clamp(16px,3.5vw,22px);
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      touch-action: manipulation;
+    ">つぎへ</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const STARS_KEY = 'kuku-master-stars-v1';
+  const MAX_STARS = 5;
+
+  // ── Audio ─────────────────────────────────────────────
+  let audioCtx = null;
+  let muted = localStorage.getItem('kuku-muted') === '1';
+
+  function getCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playNote(freq, type, when, dur, vol) {
+    if (muted) return;
+    const ctx = getCtx();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, when);
+    gain.gain.setValueAtTime(vol, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    osc.start(when);
+    osc.stop(when + dur + 0.02);
+  }
+
+  function playTap() {
+    if (muted) return;
+    const ctx = getCtx();
+    playNote(700, 'sine', ctx.currentTime, 0.04, 0.10);
+  }
+
+  function playCorrect() {
+    if (muted) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    [523.25, 659.25, 783.99].forEach((f, i) => playNote(f, 'sine', t + i * 0.08, 0.12, 0.22));
+  }
+
+  function playWrong() {
+    if (muted) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    playNote(240, 'sawtooth', t,        0.09, 0.18);
+    playNote(190, 'sawtooth', t + 0.10, 0.12, 0.18);
+  }
+
+  function playStar() {
+    if (muted) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => playNote(f, 'sine', t + i * 0.10, 0.16, 0.26));
+  }
+
+  function playMaster() {
+    if (muted) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => playNote(f, 'sine', t + i * 0.10, 0.18, 0.28));
+    [1046.5, 1318.5, 1567.98].forEach(f => playNote(f, 'sine', t + 0.65, 0.55, 0.20));
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    localStorage.setItem('kuku-muted', muted ? '1' : '0');
+    document.getElementById('btn-mute').textContent = muted ? '🔇' : '🔊';
+  }
+
+  // ── LocalStorage ─────────────────────────────────────
+  function loadStars() {
+    try {
+      const raw = localStorage.getItem(STARS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        const r = {};
+        for (let i = 1; i <= 9; i++) r[i] = Math.min(MAX_STARS, Math.max(0, parseInt(p[i] || 0)));
+        return r;
+      }
+    } catch (_) {}
+    const fresh = {};
+    for (let i = 1; i <= 9; i++) fresh[i] = 0;
+    return fresh;
+  }
+
+  function saveStars() { localStorage.setItem(STARS_KEY, JSON.stringify(state.stars)); }
+
+  function resetAllStars() {
+    for (let i = 1; i <= 9; i++) state.stars[i] = 0;
+    saveStars();
+  }
+
+  // ── State ─────────────────────────────────────────────
+  const state = {
+    mode: 'sequential',
+    currentDan: 1,
+    queue: [],
+    currentIdx: 0,
+    currentAnswer: '',
+    noMissByDan: {},
+    answeredCells: {},
+    stars: loadStars(),
+    judging: false,
+  };
+
+  // ── Helpers ───────────────────────────────────────────
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function getWeight(dan) {
+    return Math.max(1, 10 - Math.min(state.stars[dan], 9));
+  }
+
+  function initNoMiss() {
+    for (let i = 1; i <= 9; i++) state.noMissByDan[i] = true;
+  }
+
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  // ── Queue ─────────────────────────────────────────────
+  function buildQueue() {
+    const { mode, currentDan } = state;
+
+    if (mode === 'sequential') {
+      const q = [];
+      for (let b = 1; b <= 9; b++) q.push([currentDan, b]);
+      return q;
+    }
+
+    if (mode === 'random') {
+      const q = [];
+      for (let b = 1; b <= 9; b++) q.push([currentDan, b]);
+      return shuffle(q);
+    }
+
+    // mixall: weighted sampling without replacement
+    const pool = [];
+    for (let a = 1; a <= 9; a++)
+      for (let b = 1; b <= 9; b++)
+        pool.push([a, b]);
+
+    const result = [];
+    while (pool.length > 0) {
+      let total = 0;
+      const weights = pool.map(([a]) => { const w = getWeight(a); total += w; return w; });
+      let r = Math.random() * total;
+      let chosen = pool.length - 1;
+      for (let i = 0; i < weights.length; i++) {
+        r -= weights[i];
+        if (r <= 0) { chosen = i; break; }
+      }
+      result.push(pool[chosen]);
+      pool.splice(chosen, 1);
+    }
+    return result;
+  }
+
+  // ── Title screen ──────────────────────────────────────
+  const MODE_LABELS = {
+    sequential: 'じゅんばん / In Order',
+    random:     'ランダム / Random',
+    mixall:     'ぜんぶミックス / Mix All',
+  };
+
+  function showTitleScreen() {
+    document.getElementById('title-screen').classList.remove('hidden');
+  }
+
+  function hideTitleScreen() {
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('current-mode-label').textContent = MODE_LABELS[state.mode];
+  }
+
+  // ── Game ──────────────────────────────────────────────
+  function startGame() {
+    state.queue         = buildQueue();
+    state.currentIdx    = 0;
+    state.currentAnswer = '';
+    state.answeredCells = {};
+    state.judging       = false;
+    initNoMiss();
+    renderMatrix();
+    renderDanSelector();
+    renderQuestion();
+  }
+
+  // ── Render: matrix ────────────────────────────────────
+  function renderMatrix() {
+    const grid = document.getElementById('matrix-grid');
+    clearChildren(grid);
+
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        const cell = document.createElement('div');
+        cell.className = 'matrix-cell';
+        cell.dataset.row = row;
+        cell.dataset.col = col;
+
+        if (row === 0 && col === 0) {
+          cell.classList.add('corner');
+          cell.style.background = '#2d3748';
+        } else if (row === 0) {
+          cell.classList.add('header');
+          cell.textContent = col;
+        } else if (col === 0) {
+          cell.classList.add('header');
+          cell.textContent = row;
+        } else {
+          const key = row + ',' + col;
+          if (state.answeredCells[key] !== undefined) {
+            cell.classList.add('answered');
+            cell.textContent = state.answeredCells[key];
+          } else {
+            cell.classList.add('empty');
+            cell.textContent = '·';
+          }
+        }
+
+        grid.appendChild(cell);
+      }
+    }
+    updateHighlight();
+  }
+
+  function updateHighlight() {
+    if (state.currentIdx >= state.queue.length) return;
+    const [a, b] = state.queue[state.currentIdx];
+
+    document.querySelectorAll('.matrix-cell').forEach(cell => {
+      const row = +cell.dataset.row;
+      const col = +cell.dataset.col;
+      if (row === 0 || col === 0) return;
+
+      cell.classList.remove('current-cell');
+
+      if (row <= a && col <= b) {
+        cell.style.background = 'var(--row-' + row + ')';
+        if (row === a && col === b) cell.classList.add('current-cell');
+      } else {
+        const key = row + ',' + col;
+        cell.style.background = state.answeredCells[key] !== undefined ? '#fff' : '#f0f4f8';
+      }
+    });
+  }
+
+  function markCellAnswered(a, b, answer) {
+    const key = a + ',' + b;
+    state.answeredCells[key] = answer;
+
+    document.querySelectorAll('.matrix-cell').forEach(cell => {
+      if (+cell.dataset.row === a && +cell.dataset.col === b) {
+        cell.textContent = answer;
+        cell.className = 'matrix-cell answered';
+        cell.style.background = '#fff';
+      }
+    });
+  }
+
+  // ── Render: question ──────────────────────────────────
+  function renderQuestion() {
+    const qt = document.getElementById('question-text');
+    const ad = document.getElementById('answer-input-display');
+
+    if (state.currentIdx >= state.queue.length) {
+      qt.textContent = 'クリア！';
+      ad.textContent = '';
+      return;
+    }
+
+    const [a, b] = state.queue[state.currentIdx];
+    qt.textContent = a + ' × ' + b + ' = ';
+    ad.textContent = state.currentAnswer || '？';
+  }
+
+  // ── Render: dan selector ──────────────────────────────
+  function renderDanSelector() {
+    const container = document.getElementById('dan-selector');
+    clearChildren(container);
+
+    const isMixall = state.mode === 'mixall';
+    container.style.display = isMixall ? 'none' : 'flex';
+    if (isMixall) return;
+
+    for (let d = 1; d <= 9; d++) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;';
+
+      const btn = document.createElement('button');
+      btn.className = 'dan-btn' + (d === state.currentDan ? ' active' : '');
+      btn.textContent = d;
+      btn.dataset.dan = d;
+      btn.addEventListener('pointerdown', onDanBtn);
+
+      const cnt = state.stars[d];
+      const badge = document.createElement('div');
+      badge.className = 'star-badge' + (cnt >= MAX_STARS ? ' mastered' : '');
+      badge.textContent = cnt === 0 ? '☆' : (cnt >= MAX_STARS ? '⭐' + MAX_STARS : '⭐' + cnt);
+
+      wrap.appendChild(btn);
+      wrap.appendChild(badge);
+      container.appendChild(wrap);
+    }
+  }
+
+  // ── Render: keypad ────────────────────────────────────
+  function renderKeypad() {
+    const keypad = document.getElementById('keypad');
+    const keys = [
+      { kana:'７', eng:'7', type:'digit', value:'7' },
+      { kana:'８', eng:'8', type:'digit', value:'8' },
+      { kana:'９', eng:'9', type:'digit', value:'9' },
+      { kana:'４', eng:'4', type:'digit', value:'4' },
+      { kana:'５', eng:'5', type:'digit', value:'5' },
+      { kana:'６', eng:'6', type:'digit', value:'6' },
+      { kana:'１', eng:'1', type:'digit', value:'1' },
+      { kana:'２', eng:'2', type:'digit', value:'2' },
+      { kana:'３', eng:'3', type:'digit', value:'3' },
+      { kana:'けす', eng:'BS',   type:'delete', value:'' },
+      { kana:'０', eng:'0', type:'digit', value:'0' },
+      { kana:'こたえる', eng:'OK', type:'answer', value:'' },
+    ];
+
+    keys.forEach(k => {
+      const btn = document.createElement('button');
+      btn.className = 'key-btn';
+      if (k.type === 'delete') btn.classList.add('delete-btn', 'special');
+      if (k.type === 'answer') btn.classList.add('answer-btn', 'special');
+      btn.dataset.keyType  = k.type;
+      btn.dataset.keyValue = k.value;
+
+      const kanaSpan = document.createElement('span');
+      kanaSpan.className = 'kana';
+      kanaSpan.textContent = k.kana;
+
+      const engSpan = document.createElement('span');
+      engSpan.className = 'eng';
+      engSpan.textContent = k.eng;
+
+      btn.appendChild(kanaSpan);
+      btn.appendChild(engSpan);
+      btn.addEventListener('pointerdown', onKey);
+      keypad.appendChild(btn);
+    });
+  }
+
+  // ── Input handlers ────────────────────────────────────
+  function onKey(e) {
+    e.preventDefault();
+    if (state.judging || state.currentIdx >= state.queue.length) return;
+
+    const { keyType, keyValue } = e.currentTarget.dataset;
+
+    if (keyType === 'digit') {
+      if (state.currentAnswer.length < 2) {
+        state.currentAnswer += keyValue;
+        playTap();
+        renderQuestion();
+      }
+    } else if (keyType === 'delete') {
+      if (state.currentAnswer.length > 0) {
+        state.currentAnswer = state.currentAnswer.slice(0, -1);
+        playTap();
+        renderQuestion();
+      }
+    } else if (keyType === 'answer') {
+      if (state.currentAnswer.length > 0) judge();
+    }
+  }
+
+  function onDanBtn(e) {
+    e.preventDefault();
+    state.currentDan = parseInt(e.currentTarget.dataset.dan, 10);
+    startGame();
+  }
+
+  // ── Judge ─────────────────────────────────────────────
+  function judge() {
+    if (state.judging) return;
+
+    const [a, b] = state.queue[state.currentIdx];
+    const correct = a * b;
+    const input   = parseInt(state.currentAnswer, 10);
+
+    if (input === correct) {
+      state.judging = true;
+      markCellAnswered(a, b, correct);
+      state.currentAnswer = '';
+      state.currentIdx++;
+
+      playCorrect();
+      confetti({ particleCount: 35, spread: 55, origin: { y: 0.5 }, zIndex: 200 });
+
+      if (state.currentIdx >= state.queue.length) {
+        handleComplete();
+      } else {
+        setTimeout(() => {
+          state.judging = false;
+          updateHighlight();
+          renderQuestion();
+        }, 380);
+      }
+    } else {
+      state.noMissByDan[a] = false;
+      state.currentAnswer  = '';
+
+      playWrong();
+      const qt = document.getElementById('question-text');
+      qt.classList.remove('shake');
+      void qt.offsetWidth;
+      qt.classList.add('shake');
+      setTimeout(() => qt.classList.remove('shake'), 400);
+
+      renderQuestion();
+    }
+  }
+
+  function handleComplete() {
+    const { mode, currentDan } = state;
+    let gotStar = false;
+    const newlyMastered = [];
+
+    if (mode === 'sequential' || mode === 'random') {
+      if (state.noMissByDan[currentDan] && state.stars[currentDan] < MAX_STARS) {
+        state.stars[currentDan]++;
+        saveStars();
+        gotStar = true;
+        if (state.stars[currentDan] >= MAX_STARS) newlyMastered.push(currentDan);
+      }
+    } else {
+      for (let d = 1; d <= 9; d++) {
+        if (state.noMissByDan[d] && state.stars[d] < MAX_STARS) {
+          state.stars[d]++;
+          gotStar = true;
+          if (state.stars[d] >= MAX_STARS) newlyMastered.push(d);
+        }
+      }
+      if (gotStar) saveStars();
+    }
+
+    renderDanSelector();
+
+    if (newlyMastered.length > 0) {
+      playMaster();
+      confetti({ particleCount: 130, spread: 110, origin: { y: 0.25 }, zIndex: 200 });
+    } else if (gotStar) {
+      playStar();
+      confetti({ particleCount: 130, spread: 110, origin: { y: 0.25 }, zIndex: 200 });
+    }
+
+    const emoji = document.getElementById('comp-emoji');
+    const title = document.getElementById('comp-title');
+    const sub   = document.getElementById('comp-sub');
+
+    const allNoMiss = mode === 'mixall'
+      ? Object.values(state.noMissByDan).every(Boolean)
+      : state.noMissByDan[currentDan];
+
+    if (newlyMastered.length > 0) {
+      emoji.textContent = '🏆';
+      title.textContent = newlyMastered.join('・') + 'の段　マスター！';
+      sub.textContent   = '⭐⭐⭐⭐⭐ かんぺき！';
+    } else if (gotStar) {
+      emoji.textContent = '⭐';
+      title.textContent = 'せいかい！ほしゲット！';
+      const danLabel = mode !== 'mixall' ? currentDan + 'の段: ⭐' + state.stars[currentDan] : '';
+      sub.textContent = danLabel;
+    } else if (allNoMiss) {
+      emoji.textContent = '🎉';
+      title.textContent = 'ぜんもんせいかい！';
+      sub.textContent   = 'もっとれんしゅうしてほしをふやそう！';
+    } else {
+      emoji.textContent = '💪';
+      title.textContent = 'おわった！';
+      sub.textContent   = 'まちがえたけどよくがんばった！またやってみよう！';
+    }
+
+    document.getElementById('completion-overlay').classList.add('show');
+    setTimeout(() => { state.judging = false; }, 100);
+  }
+
+  // ── Boot ──────────────────────────────────────────────
+  function init() {
+    // Title screen mode cards
+    document.querySelectorAll('#title-screen .mode-card').forEach(card => {
+      card.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        state.mode = card.dataset.mode;
+        hideTitleScreen();
+        startGame();
+      });
+    });
+
+    document.getElementById('btn-back').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      showTitleScreen();
+    });
+
+    document.getElementById('btn-mute').textContent = muted ? '🔇' : '🔊';
+    document.getElementById('btn-mute').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      toggleMute();
+    });
+
+    document.getElementById('btn-restart').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      startGame();
+    });
+
+    document.getElementById('btn-reset-all').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (confirm('すべてのほしのデータをリセットします。よいですか？')) {
+        resetAllStars();
+        startGame();
+      }
+    });
+
+    document.getElementById('comp-next').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      document.getElementById('completion-overlay').classList.remove('show');
+      startGame();
+    });
+
+    document.addEventListener('gesturestart',  e => e.preventDefault());
+    document.addEventListener('gesturechange', e => e.preventDefault());
+    document.addEventListener('gestureend',    e => e.preventDefault());
+    document.addEventListener('contextmenu',   e => e.preventDefault());
+
+    renderKeypad();
+    renderDanSelector();
+    renderMatrix();
+    renderQuestion();
+    showTitleScreen();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
