@@ -255,6 +255,40 @@
       color: #e53e3e;
     }
 
+    /* ── Title stars ── */
+    .title-stars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      width: 100%;
+      max-width: 360px;
+      padding: 0 4px;
+    }
+    .title-star-cell {
+      background: rgba(255,255,255,0.85);
+      border-radius: 10px;
+      padding: 5px 4px;
+      text-align: center;
+    }
+    .title-star-dan {
+      font-size: clamp(10px,2.5vw,14px);
+      font-weight: 700;
+      color: #4a5568;
+    }
+    .title-star-row {
+      font-size: clamp(9px,1.9vw,12px);
+      letter-spacing: -0.5px;
+      margin-top: 2px;
+    }
+    .title-praise {
+      font-size: clamp(13px,3vw,18px);
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      text-align: center;
+      max-width: 360px;
+    }
+
     /* ── Title screen ── */
     #title-screen {
       position: fixed;
@@ -265,8 +299,9 @@
       align-items: center;
       justify-content: center;
       z-index: 200;
-      padding: 24px;
-      gap: 16px;
+      padding: 12px;
+      gap: 8px;
+      overflow-y: auto;
     }
 
     #title-screen.hidden { display: none; }
@@ -293,7 +328,7 @@
       max-width: 360px;
       background: white;
       border-radius: 16px;
-      padding: 16px 20px;
+      padding: 10px 14px;
       cursor: pointer;
       touch-action: manipulation;
       box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -428,6 +463,9 @@
     <div class="title-logo-en">Multiplication Master</div>
   </div>
 
+  <div id="title-stars-grid" class="title-stars-grid"></div>
+  <div id="title-praise" class="title-praise"></div>
+
   <button class="mode-card" data-mode="sequential">
     <div class="mode-card-icon">📋</div>
     <div class="mode-card-body">
@@ -547,6 +585,26 @@
     document.getElementById('btn-mute').textContent = muted ? '🔇' : '🔊';
   }
 
+  // ── BGM ───────────────────────────────────────────────
+  const BGM_NOTES = [523.25, 659.25, 783.99, 880, 1046.5, 880, 783.99, 659.25];
+  const BGM_BEAT_MS = 380;
+  let bgmTimer = null;
+  let bgmIdx = 0;
+  let bgmStarted = false;
+
+  function bgmTick() {
+    if (!muted) {
+      const ctx = getCtx();
+      playNote(BGM_NOTES[bgmIdx % BGM_NOTES.length], 'triangle', ctx.currentTime, 0.3, 0.045);
+      bgmIdx++;
+    }
+    bgmTimer = setTimeout(bgmTick, BGM_BEAT_MS);
+  }
+
+  function ensureBgm() {
+    if (!bgmStarted) { bgmStarted = true; bgmTick(); }
+  }
+
   // ── LocalStorage ─────────────────────────────────────
   function loadStars() {
     try {
@@ -594,6 +652,22 @@
 
   function getWeight(dan) {
     return Math.max(1, 10 - Math.min(state.stars[dan], 9));
+  }
+
+  function selectDanByWeight() {
+    let total = 0;
+    const weights = [];
+    for (let d = 1; d <= 9; d++) {
+      const w = (MAX_STARS - state.stars[d] + 1) * (10 - d + 1);
+      weights.push(w);
+      total += w;
+    }
+    let r = Math.random() * total;
+    for (let d = 1; d <= 9; d++) {
+      r -= weights[d - 1];
+      if (r <= 0) return d;
+    }
+    return 9;
   }
 
   function initNoMiss() {
@@ -650,6 +724,7 @@
   };
 
   function showTitleScreen() {
+    renderTitleStars();
     document.getElementById('title-screen').classList.remove('hidden');
   }
 
@@ -659,7 +734,10 @@
   }
 
   // ── Game ──────────────────────────────────────────────
-  function startGame() {
+  function startGame(keepDan) {
+    if (!keepDan && (state.mode === 'sequential' || state.mode === 'random')) {
+      state.currentDan = selectDanByWeight();
+    }
     state.queue         = buildQueue();
     state.currentIdx    = 0;
     state.currentAnswer = '';
@@ -764,28 +842,53 @@
     const container = document.getElementById('dan-selector');
     clearChildren(container);
 
-    const isMixall = state.mode === 'mixall';
-    container.style.display = isMixall ? 'none' : 'flex';
-    if (isMixall) return;
+    if (state.mode === 'mixall') {
+      container.style.display = 'none';
+      return;
+    }
 
+    container.style.cssText = 'display:flex;align-items:center;padding-left:4px;';
+    const cnt = state.stars[state.currentDan];
+    const starsStr = '⭐'.repeat(cnt) + '☆'.repeat(MAX_STARS - cnt);
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:clamp(15px,3.5vw,22px);font-weight:800;color:#4a5568;';
+    label.textContent = state.currentDan + 'の段  ' + starsStr;
+    container.appendChild(label);
+  }
+
+  function renderTitleStars() {
+    const grid = document.getElementById('title-stars-grid');
+    clearChildren(grid);
     for (let d = 1; d <= 9; d++) {
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;';
-
-      const btn = document.createElement('button');
-      btn.className = 'dan-btn' + (d === state.currentDan ? ' active' : '');
-      btn.textContent = d;
-      btn.dataset.dan = d;
-      btn.addEventListener('pointerdown', onDanBtn);
-
       const cnt = state.stars[d];
-      const badge = document.createElement('div');
-      badge.className = 'star-badge' + (cnt >= MAX_STARS ? ' mastered' : '');
-      badge.textContent = cnt === 0 ? '☆' : (cnt >= MAX_STARS ? '⭐' + MAX_STARS : '⭐' + cnt);
+      const cell = document.createElement('div');
+      cell.className = 'title-star-cell';
+      const danDiv = document.createElement('div');
+      danDiv.className = 'title-star-dan';
+      danDiv.textContent = d + 'の段';
+      const starDiv = document.createElement('div');
+      starDiv.className = 'title-star-row';
+      starDiv.textContent = cnt === 0 ? '☆☆☆☆☆' : '⭐'.repeat(cnt) + '☆'.repeat(MAX_STARS - cnt);
+      cell.appendChild(danDiv);
+      cell.appendChild(starDiv);
+      grid.appendChild(cell);
+    }
 
-      wrap.appendChild(btn);
-      wrap.appendChild(badge);
-      container.appendChild(wrap);
+    const total = Object.values(state.stars).reduce((s, v) => s + v, 0);
+    const praise = document.getElementById('title-praise');
+    const masteredCount = Object.values(state.stars).filter(v => v >= MAX_STARS).length;
+    if (total === 0) {
+      praise.textContent = 'はじめよう！まず1のだんから！';
+    } else if (masteredCount >= 9) {
+      praise.textContent = '🏆 くくはかせ！ぜんぶマスター！すごい！';
+    } else if (masteredCount >= 5) {
+      praise.textContent = '✨ もうすぐぜんぶマスター！すごいよ！';
+    } else if (total >= 15) {
+      praise.textContent = '🌟 どんどん上手になってる！えらい！';
+    } else if (total >= 5) {
+      praise.textContent = '⭐ いいね！よくがんばってる！';
+    } else {
+      praise.textContent = '💪 はじめたばかり！どんどんやろう！';
     }
   }
 
@@ -852,12 +955,6 @@
     } else if (keyType === 'answer') {
       if (state.currentAnswer.length > 0) judge();
     }
-  }
-
-  function onDanBtn(e) {
-    e.preventDefault();
-    state.currentDan = parseInt(e.currentTarget.dataset.dan, 10);
-    startGame();
   }
 
   // ── Judge ─────────────────────────────────────────────
@@ -972,6 +1069,7 @@
       card.addEventListener('pointerdown', e => {
         e.preventDefault();
         state.mode = card.dataset.mode;
+        ensureBgm();
         hideTitleScreen();
         startGame();
       });
@@ -990,21 +1088,21 @@
 
     document.getElementById('btn-restart').addEventListener('pointerdown', e => {
       e.preventDefault();
-      startGame();
+      startGame(true);
     });
 
     document.getElementById('btn-reset-all').addEventListener('pointerdown', e => {
       e.preventDefault();
       if (confirm('すべてのほしのデータをリセットします。よいですか？')) {
         resetAllStars();
-        startGame();
+        showTitleScreen();
       }
     });
 
     document.getElementById('comp-next').addEventListener('pointerdown', e => {
       e.preventDefault();
       document.getElementById('completion-overlay').classList.remove('show');
-      startGame();
+      showTitleScreen();
     });
 
     document.addEventListener('gesturestart',  e => e.preventDefault());
